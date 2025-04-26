@@ -1,8 +1,8 @@
+// Client.cpp
 #include <iostream>
 #include <WinSock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
-#include <thread>
 
 using namespace std;
 
@@ -16,70 +16,52 @@ bool initializeWinsock() {
     return true;
 }
 
-void sent(SOCKET s) {
-    string name;
-    cout << "Enter your name: ";
-    getline(cin, name);
-    string msg;
-    while(1){
-        cout << "Enter message: ";
-        getline(cin, msg);
-        if (msg == "exit") {
-            break;
-        }
-        string sendData = name + ": " + msg;
-        send(s, sendData.c_str(), sendData.size(), 0);
-        cout << "Sent data: " << sendData << endl;
-    }
-    closesocket(s);
-    WSACleanup();
-    cout << "Socket closed." << endl;
-}
-void rec(SOCKET s) {
-    char buffer[1024] = {0};
-    while (true) {
-        int bytesReceived = recv(s, buffer, sizeof(buffer), 0);
-        if (bytesReceived <= 0) {
-            cout << "Server disconnected." << endl;
-            break;
-        }
-        string receivedData(buffer, bytesReceived);
-        cout << "Received data: " << receivedData << endl;
-    }
-    closesocket(s); 
-    WSACleanup();
-    cout << "Socket closed." << endl;
-}
-
 int main() {
     initializeWinsock();
     cout << "Winsock initialized successfully." << endl;
 
-    SOCKET s;
-    string serverIP = "127.0.0.1";
-    int serverPort = 1000; 
-    
-    s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (s == INVALID_SOCKET) {
+    SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (clientSocket == INVALID_SOCKET) {
         cout << "Socket creation failed: " << WSAGetLastError() << endl;
-        WSACleanup(); 
+        WSACleanup();
         return 1;
     }
     cout << "Socket created successfully." << endl;
 
-    // Set up the server address structure
     sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(serverPort);
+    serverAddr.sin_port = htons(1000);
+    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    serverAddr.sin_addr.s_addr = inet_addr(serverIP.c_str());
-    
-    connect(s, (SOCKADDR*)&serverAddr, sizeof(serverAddr));
-    cout << "Connected to server at " << serverIP << ":" << serverPort << endl;
-    
-    thread sender(sent);
-    thread receiver(rec);
-    sender.detach();
-    receiver.detach();
+    if (connect(clientSocket, (SOCKADDR*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        cout << "Connection failed: " << WSAGetLastError() << endl;
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    cout << "Connected to server." << endl;
+
+    char buffer[1024];
+    while (true) {
+        cout << "You: ";
+        string message;
+        getline(cin, message);
+        if (message == "exit") {
+            break;
+        }
+        send(clientSocket, message.c_str(), message.size(), 0);
+
+        ZeroMemory(buffer, sizeof(buffer));
+        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (bytesReceived <= 0) {
+            cout << "Server disconnected." << endl;
+            break;
+        }
+        cout << "Server: " << string(buffer, bytesReceived) << endl;
+    }
+
+    closesocket(clientSocket);
+    WSACleanup();
+    cout << "Client shutdown." << endl;
     return 0;
 }
